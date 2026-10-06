@@ -1,1 +1,151 @@
-<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>🌀 陀螺賽事管理平台</title><link rel="stylesheet" href="styles.css"></head><body><header><div><b>🌀 陀螺賽事管理平台</b><small> 主審・裁判・參賽者 MVP</small></div><button id="reset">重設示範</button></header><main><section class="hero"><span>LIVE DEMO</span><h1 id="title">10/7 大鯊魚比賽</h1><p>三種角色共用的現場賽事操作原型</p></section><nav><button class="tab on" data-t="chief">👑 主審</button><button class="tab" data-t="ref">🧑‍⚖️ 裁判</button><button class="tab" data-t="player">🧑‍🎮 參賽者</button></nav><section id="chief" class="panel on"><div class="cols"><article><h2>比賽設定</h2><div class="form"><label>比賽名稱<input id="ename" value="10/7 大鯊魚比賽"></label><label>參賽人數<input id="pc" type="number" value="10" min="2"></label><label>場地數<input id="cc" type="number" value="4" min="1" max="8"></label><label>取前幾名<input id="top" type="number" value="4" min="1"></label></div><button id="apply" class="primary">套用設定</button><div id="format" class="notice"></div></article><article><h2>裁判管理</h2><div id="refs"></div></article></div><article><h2>現場控制塔</h2><div id="tower" class="courts"></div></article><article><h2>名次與下一場</h2><div class="notice">🏆 冠軍／🥈亞軍由決賽結果產生；設定前 3、前 4 等名次後，系統可安排對應排名戰。</div></article></section><section id="ref" class="panel"><article><div class="row"><h2>🧑‍⚖️ 裁判操作</h2><select id="court"></select><button id="join">模擬掃描 QR 加入</button></div><div id="match"></div></article></section><section id="player" class="panel"><article><div class="row"><h2>🧑‍🎮 公開比賽頁</h2><select id="follow"></select><button id="change">更換玩家</button></div><div id="next" class="next"></div><div id="bracket"></div></article></section></main><div id="toast"></div><script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>85°X 賽事管理平台</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">85°X <span>賽事管理平台</span></div>
+  <div class="top-actions">
+    <button id="hostLoginBtn" class="primary small">👑 主審登入</button>
+    <button id="backHomeBtn" class="secondary small hidden">返回首頁</button>
+  </div>
+</header>
+
+<main class="container">
+  <section id="homeView" class="view">
+    <section class="hero">
+      <div>
+        <span class="pill">85°X</span>
+        <h1>85°X 賽事管理平台</h1>
+        <p>現場賽事管理、裁判記分與公開賽事資訊。</p>
+      </div>
+    </section>
+
+    <section class="card rules-card">
+      <div class="card-title">
+        <h2>🌀 陀螺比賽基本規則</h2>
+        <span>公開說明</span>
+      </div>
+      <div class="rules-grid">
+        <div><strong>轉停</strong><b>+1</b><span>得 1 分</span></div>
+        <div><strong>爆裂</strong><b>+2</b><span>得 2 分</span></div>
+        <div><strong>擊飛</strong><b>+2</b><span>得 2 分</span></div>
+        <div><strong>極限</strong><b>+3</b><span>得 3 分</span></div>
+      </div>
+      <div class="notice">比賽中由裁判依照實際結果記分，<strong>先達 4 分者獲勝</strong>。</div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">
+        <h2>🔐 管理入口</h2>
+        <span>需要權限</span>
+      </div>
+      <p class="muted">主審請使用右上角「主審登入」。參賽者請使用主審建立後產生的「公開賽事 URL」進入，不需從這裡選擇比賽。</p>
+    </section>
+  </section>
+
+  <section id="hostView" class="view hidden">
+    <div class="role-banner">
+      <div><strong>👑 主審高級權限</strong><span>已登入，可管理賽事與角色</span></div>
+      <button id="logoutHost" class="secondary small">登出</button>
+    </div>
+
+    <div class="grid two">
+      <article class="card">
+        <div class="card-title"><h2>建立公開賽事</h2><span>主審專用</span></div>
+        <div class="settings-grid">
+          <label>比賽名稱<input id="eventNameInput" placeholder="例如：10/7 大鯊魚比賽"></label>
+          <label>比賽日期<input id="eventDateInput" type="date"></label>
+          <label>比賽時間<input id="eventTimeInput" type="time"></label>
+          <label>參賽人數<input id="participantCount" type="number" min="2" placeholder="例如：16"></label>
+          <label>場地數量<input id="courtCount" type="number" min="1" max="8" placeholder="例如：4"></label>
+          <label>取前幾名<input id="topN" type="number" min="1" placeholder="例如：4"></label>
+        </div>
+        <button id="createEventBtn" class="primary">建立賽事</button>
+        <div id="formatSummary" class="notice">建立後系統會產生專屬「公開賽事 URL」。</div>
+      </article>
+
+      <article class="card">
+        <div class="card-title"><h2>🌐 公開賽事</h2><span>參賽者入口</span></div>
+        <div id="publicEventBox" class="notice">尚未建立公開賽事。</div>
+      </article>
+    </div>
+
+    <article class="card">
+      <div class="card-title"><h2>🧑‍⚖️ 裁判管理</h2><span>QR Code 加入</span></div>
+      <div id="refereeTable" class="empty">建立賽事後，系統會產生每個場地的裁判 QR Code。</div>
+    </article>
+
+    <article class="card">
+      <div class="card-title"><h2>🎛️ 現場控制塔</h2><span>高級權限</span></div>
+      <div id="controlTower" class="court-grid"></div>
+    </article>
+
+    <article class="card">
+      <div class="card-title"><h2>🏆 名次與下一場</h2><span>系統管理</span></div>
+      <div id="placementPanel" class="notice">建立賽事後顯示。</div>
+    </article>
+  </section>
+
+  <section id="refereeView" class="view hidden">
+    <div class="role-banner referee-banner">
+      <div><strong>🧑‍⚖️ 裁判模式</strong><span id="refereeRoleText">指定場地</span></div>
+      <button id="refLogout" class="secondary small">離開</button>
+    </div>
+    <article class="card">
+      <div class="card-title">
+        <h2 id="refereeCourtTitle">尚未加入場地</h2>
+        <span id="refereeStatus" class="status">未連線</span>
+      </div>
+      <div id="matchPanel"></div>
+    </article>
+  </section>
+
+  <section id="publicView" class="view hidden">
+    <section class="hero public-hero">
+      <div>
+        <span class="pill">公開賽事</span>
+        <h1 id="publicEventName">比賽</h1>
+        <p id="publicEventMeta"></p>
+      </div>
+      <div class="public-live">● LIVE</div>
+    </section>
+
+    <article class="card">
+      <div class="card-title"><h2>📋 比賽進度</h2><span>公開資訊</span></div>
+      <div id="publicStatus" class="notice"></div>
+      <div id="publicCourts" class="court-grid"></div>
+    </article>
+
+    <article class="card">
+      <div class="card-title"><h2>🏆 公開賽程</h2><span>不需登入</span></div>
+      <div id="publicBracket" class="bracket"></div>
+    </article>
+
+    <article class="card">
+      <div class="card-title"><h2>🧑‍🎮 我的比賽路線</h2><span>本裝置記憶</span></div>
+      <div class="player-select-row">
+        <div><div class="muted">目前查看</div><strong id="selectedPlayerLabel">尚未選擇</strong></div>
+        <select id="playerSelect"><option value="">請選擇玩家</option></select>
+        <button id="changePlayer" class="secondary">更換玩家</button>
+      </div>
+      <div id="playerNext" class="next-match">選擇玩家後，系統會標示該玩家的比賽路線。</div>
+    </article>
+  </section>
+</main>
+
+<div id="modal" class="modal hidden">
+  <div class="modal-box">
+    <button id="closeModal" class="modal-close">×</button>
+    <h2 id="modalTitle"></h2>
+    <div id="modalBody"></div>
+  </div>
+</div>
+<div id="toast" class="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
