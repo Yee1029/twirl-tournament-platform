@@ -1,3 +1,4 @@
+.hidden{display:none!important}.view.hidden{display:none!important}
 :root{
 --bg:#f4f7fb;--card:#fff;--text:#172132;--muted:#6c7889;--line:#dfe5ec;
 --primary:#315de8;--primary-dark:#2449be;--success:#168653;--danger:#c43c3c;

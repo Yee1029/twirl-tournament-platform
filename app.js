@@ -7,9 +7,10 @@ const stateDefault={
   selectedPlayerId:Number(localStorage.getItem("85xSelectedPlayer")||0)
 };
 let state=load();
+// Authentication is session-only. Never inherit an old localStorage login.\nstate.hostLogged = sessionStorage.getItem("85xHostAuthenticated") === "1";
 
 function load(){try{return {...stateDefault,...JSON.parse(localStorage.getItem(KEY)||"{}")}}catch{return structuredClone(stateDefault)}}
-function save(){localStorage.setItem(KEY,JSON.stringify(state))}
+function save(){\n  const persisted={...state,hostLogged:false};\n  localStorage.setItem(KEY,JSON.stringify(persisted));\n}
 function pname(id){return state.players.find(p=>p.id===id)?.name||"待定"}
 function cname(i){return `${String.fromCharCode(65+i)}場`}
 function sizeFor(n){return [8,16,32,64,128].find(x=>x>=n)||128}
@@ -32,10 +33,11 @@ function setTopButtons(mode){
   back.classList.toggle("hidden",mode==="home");
 }
 function render(){
+  hideAll();
   const mode=currentMode();
-  if(mode==="public"){hideAll();document.getElementById("publicView").classList.remove("hidden");setTopButtons("public");renderPublic()}
-  else if(mode==="ref"){hideAll();document.getElementById("refereeView").classList.remove("hidden");setTopButtons("ref");renderRefereeFromQuery()}
-  else if(state.hostLogged){hideAll();document.getElementById("hostView").classList.remove("hidden");setTopButtons("host");renderHost()}
+  if(mode==="public"){document.getElementById("publicView").classList.remove("hidden");setTopButtons("public");renderPublic()}
+  else if(mode==="ref"){document.getElementById("refereeView").classList.remove("hidden");setTopButtons("ref");renderRefereeFromQuery()}
+  else if(state.hostLogged){document.getElementById("hostView").classList.remove("hidden");setTopButtons("host");renderHost()}
   else{hideAll();document.getElementById("homeView").classList.remove("hidden");setTopButtons("home")}
 }
 
@@ -44,12 +46,12 @@ function loginHost(){
     <label>帳號<input id="hostUser" autocomplete="username" placeholder="請輸入主審帳號"></label>
     <label>密碼<input id="hostPass" type="password" autocomplete="current-password" placeholder="請輸入主審密碼"></label>
     <button id="doHostLogin" class="primary">登入並確認高級權限</button>
-    <div class="notice">目前 Demo 帳號：<strong>admin</strong>／密碼：<strong>1234</strong>。正式版會改為安全的帳號驗證。</div>
+    <div class="notice">請輸入主審管理帳號。正式版會改為安全的帳號驗證。</div>
   </div>`);
 }
 function doHostLogin(){
   if(document.getElementById("hostUser").value===HOST_USER&&document.getElementById("hostPass").value===HOST_PASS){
-    state.hostLogged=true;save();closeModal();render();toast("已確認主審高級權限")
+    state.hostLogged=true;sessionStorage.setItem("85xHostAuthenticated","1");save();closeModal();render();toast("主審驗證成功")
   }else toast("帳號或密碼錯誤")
 }
 
@@ -138,12 +140,12 @@ function addScore(mid,pid,pts,type){
 }
 
 document.getElementById("hostLoginBtn").addEventListener("click",loginHost);
-document.getElementById("backHomeBtn").addEventListener("click",()=>{history.pushState({}, "", location.pathname);state.hostLogged=false;render()});
+document.getElementById("backHomeBtn").addEventListener("click",()=>{history.pushState({}, "", location.pathname);state.hostLogged=false;sessionStorage.removeItem("85xHostAuthenticated");render()});
 document.getElementById("closeModal").addEventListener("click",closeModal);
 document.getElementById("modal").addEventListener("click",e=>{if(e.target.id==="modal")closeModal()});
 document.getElementById("modalBody").addEventListener("click",e=>{if(e.target.id==="doHostLogin")doHostLogin()});
 document.getElementById("createEventBtn").addEventListener("click",createEvent);
-document.getElementById("logoutHost").addEventListener("click",()=>{state.hostLogged=false;save();render()});
+document.getElementById("logoutHost").addEventListener("click",()=>{state.hostLogged=false;sessionStorage.removeItem("85xHostAuthenticated");save();render()});
 document.getElementById("refLogout").addEventListener("click",()=>{history.pushState({}, "", location.pathname);state.referee={court:null,eventId:""};render()});
 document.getElementById("playerSelect").addEventListener("change",e=>{if(!e.target.value)return;state.selectedPlayerId=+e.target.value;localStorage.setItem("85xSelectedPlayer",state.selectedPlayerId);renderPublic()});
 document.getElementById("changePlayer").addEventListener("click",()=>document.getElementById("playerSelect").focus());
