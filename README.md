@@ -1,39 +1,45 @@
-# 85°X 賽事管理平台 — MVP v3
+# 85°X 賽事管理平台 — MVP v5
 
-## 本版調整
+## 本版重點
 
-### 1. 首頁
-- 網頁大標題改為「85°X 賽事管理平台」。
-- 開啟網站時不預設任何比賽。
-- 不要求使用者先知道自己是哪一場比賽。
-- 首頁只提供陀螺基本規則與主審登入入口。
+### 👑 主審登入改為 Google OAuth
+- 首頁右上角「👑 主審登入」改成「使用 Google 登入」。
+- 使用 Supabase Auth + Google OAuth。
+- 不再使用舊版 `admin / 1234` Demo 帳密。
+- 平台管理員固定為：`yee861029@gmail.com`。
+- Google 驗證成功後，系統再檢查是否具有主審資格。
 
-### 2. 主審權限
-- 點擊「主審登入」後輸入帳號密碼。
-- Demo 帳號：`admin`
-- Demo 密碼：`1234`
-- 驗證成功後才顯示主審高級權限。
-- 主審可以建立公開賽事。
-- 建立後自動產生公開賽事 URL，並提供「複製」按鈕。
+### 權限設計
+- `platform_admin`：平台最高管理權限，目前為 `yee861029@gmail.com`。
+- `host`：一般主審，之後由平台管理員授權 Google 帳號。
+- 裁判：不使用 Google 帳號，仍規劃使用賽事／場地 QR Code 臨時加入。
+- 參賽者：不需要登入，使用公開賽事 URL。
 
-### 3. 裁判
-- 主審建立賽事後，每個場地產生專屬裁判加入 URL／加入碼。
-- 正式版本預計以 QR Code 掃描進入。
-- 裁判進入後才會看到自己的場地、對戰與分數按鈕。
-- 記分：轉停 +1、爆裂 +2、擊飛 +2、極限 +3。
-- 先達 4 分者獲勝。
+### ⚠️ 上線前必做
+請先建立 Supabase Project，並在 `supabase-config.js` 填入：
+- Supabase Project URL
+- Supabase anon/publishable key
 
-### 4. 參賽者
-- 不從首頁選擇比賽。
-- 參賽者必須使用主審產生的「公開賽事 URL」進入。
-- 公開頁不需要帳號。
-- 可選擇追蹤自己的玩家並高亮賽程路線。
+不要放 `service_role` key。
 
-## 本版 V4 修正
-- 主審登入狀態改為 session-only，不再寫入 localStorage。
-- 清除舊版殘留的主審登入狀態後，重新開啟首頁一定先看到一般首頁。
-- render 時先強制隱藏所有角色畫面，再只顯示目前角色，避免主審／首頁／裁判畫面同時出現。
+### Supabase 後續資料表
+正式版預計建立：
+- `profiles`
+- `user_roles`
+- `events`
+- `event_hosts`
+- `courts`
+- `referees`
+- `matches`
+- `match_scores`
 
-## 注意
-目前是 GitHub Pages 前端 MVP。資料使用 localStorage，所以不同裝置尚未真正同步。
-下一階段應接 Supabase：資料庫、登入權限、Realtime、真正 QR Code、完整淘汰賽引擎與事件安全驗證。
+一般主審的資格會從 `user_roles` 判斷，而不是只靠前端寫死 Gmail。
+
+### Google OAuth
+在 Supabase Authentication → Providers → Google 啟用 Google Provider，並設定 Google Cloud OAuth Client。
+OAuth 回呼網址使用 Supabase Dashboard 提供的 Callback URL；同時將 GitHub Pages 網址加入 Redirect URLs，例如：
+`https://yee1029.github.io/twirl-tournament-platform/`
+
+## 目前仍是前端 MVP
+賽事資料目前仍使用 localStorage，因此不同裝置還不能真正同步。
+下一階段接上 Supabase Database + RLS + Realtime 後，才會成為真正的多人即時賽事平台。

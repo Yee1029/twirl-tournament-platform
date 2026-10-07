@@ -1,16 +1,32 @@
-const KEY="85xTournamentV3";
-const HOST_USER="admin";
-const HOST_PASS="1234";
-const stateDefault={
+const KEY = "85xTournamentV5";
+const CONFIG = window.SUPABASE_CONFIG || {};
+const ADMIN_EMAIL = String(CONFIG.platformAdminEmail || "yee861029@gmail.com").trim().toLowerCase();
+const SUPABASE_READY = Boolean(
+  window.supabase &&
+  CONFIG.url && CONFIG.anonKey &&
+  !CONFIG.url.includes("YOUR_SUPABASE") &&
+  !CONFIG.anonKey.includes("YOUR_SUPABASE")
+);
+const sb = SUPABASE_READY ? window.supabase.createClient(CONFIG.url, CONFIG.anonKey) : null;
+
+const stateDefault = {
   event:{id:"",name:"",date:"",time:"",participantCount:null,courtCount:null,topN:null,created:false},
-  players:[],referees:[],matches:[],hostLogged:false,referee:{court:null,eventId:""},
+  players:[],referees:[],matches:[],
+  hostLogged:false,
+  hostUser:null,
+  referee:{court:null,eventId:""},
   selectedPlayerId:Number(localStorage.getItem("85xSelectedPlayer")||0)
 };
-let state=load();
-// Authentication is session-only. Never inherit an old localStorage login.\nstate.hostLogged = sessionStorage.getItem("85xHostAuthenticated") === "1";
+let state = load();
 
-function load(){try{return {...stateDefault,...JSON.parse(localStorage.getItem(KEY)||"{}")}}catch{return structuredClone(stateDefault)}}
-function save(){\n  const persisted={...state,hostLogged:false};\n  localStorage.setItem(KEY,JSON.stringify(persisted));\n}
+function load(){
+  try { return {...structuredClone(stateDefault), ...JSON.parse(localStorage.getItem(KEY)||"{}")}; }
+  catch { return structuredClone(stateDefault); }
+}
+function save(){
+  const persisted={...state,hostLogged:false,hostUser:null};
+  localStorage.setItem(KEY,JSON.stringify(persisted));
+}
 function pname(id){return state.players.find(p=>p.id===id)?.name||"待定"}
 function cname(i){return `${String.fromCharCode(65+i)}場`}
 function sizeFor(n){return [8,16,32,64,128].find(x=>x>=n)||128}
@@ -32,27 +48,88 @@ function setTopButtons(mode){
   login.classList.toggle("hidden",mode==="host"||mode==="ref");
   back.classList.toggle("hidden",mode==="home");
 }
+
+async function restoreAuth(){
+  if(!sb){
+    state.hostLogged = sessionStorage.getItem("85xHostAuthenticated")==="1";
+    return;
+  }
+  const {data:{session}} = await sb.auth.getSession();
+  state.hostUser = session?.user || null;
+  state.hostLogged = false;
+  if(session?.user) await applyHostAuthorization(session.user);
+}
+
+async function applyHostAuthorization(user){
+  const email=String(user.email||"").trim().toLowerCase();
+  // 平台管理員為固定 bootstrap 帳號；其他主審則由 user_roles 表授權。
+  if(email===ADMIN_EMAIL){
+    state.hostLogged=true;
+    state.hostUser={...user, role:"platform_admin"};
+    sessionStorage.setItem("85xHostAuthenticated","1");
+    return true;
+  }
+  if(!sb){return false;}
+  try{
+    const {data,error}=await sb.from("user_roles").select("role").eq("user_id",user.id).eq("role","host").maybeSingle();
+    if(error) throw error;
+    if(data?.role==="host"){
+      state.hostLogged=true;
+      state.hostUser={...user, role:"host"};
+      sessionStorage.setItem("85xHostAuthenticated","1");
+      return true;
+    }
+  }catch(err){
+    console.error("讀取主審權限失敗",err);
+  }
+  state.hostLogged=false;
+  sessionStorage.removeItem("85xHostAuthenticated");
+  return false;
+}
+
 function render(){
   hideAll();
   const mode=currentMode();
   if(mode==="public"){document.getElementById("publicView").classList.remove("hidden");setTopButtons("public");renderPublic()}
   else if(mode==="ref"){document.getElementById("refereeView").classList.remove("hidden");setTopButtons("ref");renderRefereeFromQuery()}
   else if(state.hostLogged){document.getElementById("hostView").classList.remove("hidden");setTopButtons("host");renderHost()}
-  else{hideAll();document.getElementById("homeView").classList.remove("hidden");setTopButtons("home")}
+  else{document.getElementById("homeView").classList.remove("hidden");setTopButtons("home")}
 }
 
 function loginHost(){
+  const setupNotice = SUPABASE_READY
+    ? `<div class="notice">將使用 Google 登入。登入後系統會檢查你的主審資格。</div>`
+    : `<div class="notice">目前尚未設定 Supabase。請先在 <strong>supabase-config.js</strong> 填入 Project URL 與 anon/publishable key，再啟用 Google 登入。</div>`;
   openModal("👑 主審登入",`<div class="modal-form">
-    <label>帳號<input id="hostUser" autocomplete="username" placeholder="請輸入主審帳號"></label>
-    <label>密碼<input id="hostPass" type="password" autocomplete="current-password" placeholder="請輸入主審密碼"></label>
-    <button id="doHostLogin" class="primary">登入並確認高級權限</button>
-    <div class="notice">請輸入主審管理帳號。正式版會改為安全的帳號驗證。</div>
+    <button id="googleLoginBtn" class="primary" ${SUPABASE_READY?"":"disabled"}>使用 Google 登入</button>
+    ${setupNotice}
+    <div class="notice">平台管理員：<strong>${ADMIN_EMAIL}</strong></div>
   </div>`);
 }
-function doHostLogin(){
-  if(document.getElementById("hostUser").value===HOST_USER&&document.getElementById("hostPass").value===HOST_PASS){
-    state.hostLogged=true;sessionStorage.setItem("85xHostAuthenticated","1");save();closeModal();render();toast("主審驗證成功")
-  }else toast("帳號或密碼錯誤")
+
+async function doGoogleLogin(){
+  if(!sb){toast("尚未設定 Supabase");return}
+  const redirectTo=location.origin+location.pathname;
+  const {error}=await sb.auth.signInWithOAuth({provider:"google",options:{redirectTo,queryParams:{access_type:"offline",prompt:"select_account"}}});
+  if(error){console.error(error);toast("Google 登入失敗："+error.message)}
+}
+
+async function finishOAuth(){
+  if(!sb)return;
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session?.user)return;
+  const allowed=await applyHostAuthorization(session.user);
+  if(allowed){closeModal();render();toast(state.hostUser.role==="platform_admin"?"平台管理員登入成功":"主審登入成功")}
+  else{
+    await sb.auth.signOut();
+    openModal("⛔ 沒有主審權限",`<div class="modal-form"><div class="notice">Google 帳號 <strong>${session.user.email||""}</strong> 已登入，但目前沒有 85°X 主審資格。</div><div class="notice">若要授權，請由平台管理員在主審管理功能中加入此 Google 帳號。</div><button id="closeAuthDenied" class="secondary">返回首頁</button></div>`);
+  }
+}
+
+function logout(){
+  state.hostLogged=false;state.hostUser=null;sessionStorage.removeItem("85xHostAuthenticated");
+  if(sb) sb.auth.signOut().catch(console.error);
+  render();
 }
 
 function createEvent(){
@@ -67,9 +144,10 @@ function createEvent(){
   state.event={id,name,date,time,participantCount:count,courtCount:courts,topN,created:true};
   state.players=Array.from({length:count},(_,i)=>({id:i+1,name:`玩家${i+1}`}));
   state.referees=Array.from({length:courts},(_,i)=>({name:`裁判${String.fromCharCode(65+i)}`,court:cname(i),code:`${String.fromCharCode(65+i)}${Math.random().toString(36).slice(2,6).toUpperCase()}`,connected:false}));
-  state.matches=Array.from({length:Math.min(courts,count/2|0)},(_,i)=>({id:i+1,court:i,p1:i*2+1,p2:i*2+2,score1:0,score2:0,history:[],winner:null,status:"playing"}));
+  state.matches=Array.from({length:Math.min(courts,Math.floor(count/2))},(_,i)=>({id:i+1,court:i,p1:i*2+1,p2:i*2+2,score1:0,score2:0,history:[],winner:null,status:"playing"}));
   save();renderHost();toast("公開賽事已建立")
 }
+
 function renderHost(){
   document.getElementById("eventNameInput").value=state.event.name||"";
   document.getElementById("eventDateInput").value=state.event.date||"";
@@ -77,12 +155,19 @@ function renderHost(){
   document.getElementById("participantCount").value=state.event.participantCount||"";
   document.getElementById("courtCount").value=state.event.courtCount||"";
   document.getElementById("topN").value=state.event.topN||"";
+  const roleLabel=state.hostUser?.role==="platform_admin"?"👑 平台管理員":"👑 主審";
+  const email=state.hostUser?.email||"已授權帳號";
+  const authBox=document.querySelector("#hostView .card");
+  if(authBox){
+    const title=authBox.querySelector(".card-title");
+    if(title) title.dataset.auth=roleLabel;
+  }
   document.getElementById("formatSummary").innerHTML=state.event.created?`實際 ${state.event.participantCount} 人 → ${sizeFor(state.event.participantCount)} 人架構。${state.event.participantCount>sizeFor(state.event.participantCount)/2?"系統預留第0輪。":""}`:"建立後系統會產生專屬「公開賽事 URL」。";
   document.getElementById("publicEventBox").innerHTML=state.event.created?`
     <div><strong>${state.event.name}</strong><div class="muted">參賽 ${state.event.participantCount} 人・${state.event.courtCount} 場・取前 ${state.event.topN} 名</div></div>
     <div class="copy-row" style="margin-top:10px"><input id="publicUrlInput" readonly value="${publicUrl()}"><button id="copyPublicUrl" class="primary">複製</button></div>
     <div class="notice">把這個 URL 給參賽者；只有透過這個公開賽事 URL 才會進入參賽者頁面。</div>`:"尚未建立公開賽事。";
-  document.getElementById("refereeTable").innerHTML=state.referees.length?state.referees.map((r,i)=>`
+  document.getElementById("refereeTable").innerHTML=state.referees.length?state.referees.map(r=>`
     <div class="referee-row">
       <div><strong>${r.name}</strong><div class="muted">${r.court}・${r.connected?"🟢 已加入":"🔴 尚未加入"}</div></div>
       <div><div class="copy-row"><input readonly value="${refUrl(r.code)}"><button class="secondary copyRef" data-url="${refUrl(r.code)}">複製</button></div><div class="muted">加入碼：${r.code}</div></div>
@@ -139,15 +224,25 @@ function addScore(mid,pid,pts,type){
   save();render();
 }
 
+// 事件綁定
+
 document.getElementById("hostLoginBtn").addEventListener("click",loginHost);
-document.getElementById("backHomeBtn").addEventListener("click",()=>{history.pushState({}, "", location.pathname);state.hostLogged=false;sessionStorage.removeItem("85xHostAuthenticated");render()});
+document.getElementById("backHomeBtn").addEventListener("click",()=>{history.pushState({},"",location.pathname);state.hostLogged=false;state.hostUser=null;sessionStorage.removeItem("85xHostAuthenticated");render()});
 document.getElementById("closeModal").addEventListener("click",closeModal);
 document.getElementById("modal").addEventListener("click",e=>{if(e.target.id==="modal")closeModal()});
-document.getElementById("modalBody").addEventListener("click",e=>{if(e.target.id==="doHostLogin")doHostLogin()});
+document.getElementById("modalBody").addEventListener("click",e=>{
+  if(e.target.id==="googleLoginBtn")doGoogleLogin();
+  if(e.target.id==="closeAuthDenied")closeModal();
+});
 document.getElementById("createEventBtn").addEventListener("click",createEvent);
-document.getElementById("logoutHost").addEventListener("click",()=>{state.hostLogged=false;sessionStorage.removeItem("85xHostAuthenticated");save();render()});
-document.getElementById("refLogout").addEventListener("click",()=>{history.pushState({}, "", location.pathname);state.referee={court:null,eventId:""};render()});
+document.getElementById("logoutHost").addEventListener("click",logout);
+document.getElementById("refLogout").addEventListener("click",()=>{history.pushState({},"",location.pathname);state.referee={court:null,eventId:""};render()});
 document.getElementById("playerSelect").addEventListener("change",e=>{if(!e.target.value)return;state.selectedPlayerId=+e.target.value;localStorage.setItem("85xSelectedPlayer",state.selectedPlayerId);renderPublic()});
 document.getElementById("changePlayer").addEventListener("click",()=>document.getElementById("playerSelect").focus());
 window.addEventListener("popstate",render);
-render();
+
+(async()=>{
+  await restoreAuth();
+  await finishOAuth();
+  render();
+})();
